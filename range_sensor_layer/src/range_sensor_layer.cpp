@@ -2,10 +2,14 @@
 #include <boost/algorithm/string.hpp>
 #include <pluginlib/class_list_macros.h>
 #include <angles/angles.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
 
 PLUGINLIB_EXPORT_CLASS(range_sensor_layer::RangeSensorLayer, costmap_2d::Layer)
 
 using costmap_2d::NO_INFORMATION;
+
+const int THRESHOLD = 60;
 
 namespace range_sensor_layer
 {
@@ -16,6 +20,7 @@ void RangeSensorLayer::onInitialize()
 {
   ros::NodeHandle nh("~/" + name_);
   current_ = true;
+  fusion = false;
   buffered_readings_ = 0;
   last_reading_time_ = ros::Time::now();
   default_value_ = to_cost(0.5);
@@ -65,7 +70,7 @@ void RangeSensorLayer::onInitialize()
     ROS_WARN("Empty topic names list: range sensor layer will have no effect on costmap");
   }
 
-  // Traverse the topic names list subscribing to all of them with the same callback method
+    // Traverse the topic names list subscribing to all of them with the same callback method
   for (unsigned int i = 0; i < topic_names.size(); i++)
   {
     if (topic_names[i].getType() != XmlRpc::XmlRpcValue::TypeString)
@@ -98,11 +103,21 @@ void RangeSensorLayer::onInitialize()
     }
   }
 
+  range_subs_.push_back(nh.subscribe("/scan", 100, &RangeSensorLayer::bufferIncomingScanMsg, this));
+
   dsrv_ = new dynamic_reconfigure::Server<range_sensor_layer::RangeSensorLayerConfig>(nh);
   dynamic_reconfigure::Server<range_sensor_layer::RangeSensorLayerConfig>::CallbackType cb = boost::bind(
       &RangeSensorLayer::reconfigureCB, this, _1, _2);
   dsrv_->setCallback(cb);
   global_frame_ = layered_costmap_->getGlobalFrameID();
+
+ /* 
+  message_filters::Subscriber<sensor_msgs::LaserScan> scan_sub(nh, "/scan", 10);
+  message_filters::Subscriber<sensor_msgs::Range> sonar_sub(nh, range_subs_.back().getTopic().c_str(), 10);  
+
+  message_filters::TimeSynchronizer<sensor_msgs::LaserScan, sensor_msgs::Range> sync(scan_sub, sonar_sub, 60);
+  sync.registerCallback(boost::bind(&RangeSensorLayer::syncCB, this, _1, _2));
+*/
 }
 
 
@@ -150,12 +165,47 @@ double RangeSensorLayer::sensor_model(double r, double phi, double theta)
 }
 
 
+
+void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
+{
+  
+   scan_message_mutex_.lock();
+   sensor_msgs::LaserScan scan_message = scan_msgs_;
+   scan_message_mutex_.unlock();
+
+   size_t raduis_center = scan_message.ranges.size()/2;
+   if (scan_message.ranges[raduis_center] > range_message.range + 0.2) {
+      fusion = false;
+      return;
+   }
+
+   size_t raduis_start = scan_message.ranges.size()/2 - 40;
+   size_t raduis_stop = scan_message.ranges.size()/2 + 40;
+   unsigned int count = 0;
+
+   for (size_t i = raduis_start; i < raduis_stop; i++)
+   {
+      float scan_data = scan_message.ranges[i];
+   //   ROS_INFO("scan_data: %f, index %d", scan_data, i);
+      if (!std::isfinite(scan_data)) 
+          continue;
+
+      if (scan_data < range_message.range + 0.2)
+          count++; 
+   }
+   ROS_INFO("count %d", count);
+   if (count > THRESHOLD)
+       fusion = true;
+   else
+       fusion = false;
+
+}
+
 void RangeSensorLayer::reconfigureCB(range_sensor_layer::RangeSensorLayerConfig &config, uint32_t level)
 {
   phi_v_ = config.phi;
   max_angle_ = config.max_angle;
   no_readings_timeout_ = config.no_readings_timeout;
-  clear_threshold_ = config.clear_threshold;
   mark_threshold_ = config.mark_threshold;
   clear_on_max_reading_ = config.clear_on_max_reading;
     
@@ -166,8 +216,15 @@ void RangeSensorLayer::reconfigureCB(range_sensor_layer::RangeSensorLayerConfig 
   }
 }
 
+void RangeSensorLayer::bufferIncomingScanMsg(const sensor_msgs::LaserScanConstPtr& scan_message)
+{
+    boost::mutex::scoped_lock lock(scan_message_mutex_);
+    scan_msgs_ = *scan_message;
+}
+
 void RangeSensorLayer::bufferIncomingRangeMsg(const sensor_msgs::RangeConstPtr& range_message)
 {
+  ROS_INFO("range coming");
   boost::mutex::scoped_lock lock(range_message_mutex_);
   range_msgs_buffer_.push_back(*range_message);
 }
@@ -223,15 +280,18 @@ void RangeSensorLayer::processFixedRangeMsg(sensor_msgs::Range& range_message)
 
 void RangeSensorLayer::processVariableRangeMsg(sensor_msgs::Range& range_message)
 {
-  if (range_message.range < range_message.min_range || range_message.range > range_message.max_range)
+  if (range_message.range < range_message.min_range ||
+      range_message.range > range_message.max_range)
     return;
 
   bool clear_sensor_cone = false;
+  syncCB(range_message);
 
-  if (range_message.range == range_message.max_range && clear_on_max_reading_)
+  if ((range_message.range == range_message.max_range && clear_on_max_reading_) ||
+       fusion)
     clear_sensor_cone = true;
 
-  updateCostmap(range_message, clear_sensor_cone);
+    updateCostmap(range_message, clear_sensor_cone);
 }
 
 void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool clear_sensor_cone)

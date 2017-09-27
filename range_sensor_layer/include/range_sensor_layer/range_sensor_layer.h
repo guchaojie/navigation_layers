@@ -4,6 +4,7 @@
 #include <costmap_2d/costmap_layer.h>
 #include <costmap_2d/layered_costmap.h>
 #include <sensor_msgs/Range.h>
+#include <sensor_msgs/LaserScan.h>
 #include <range_sensor_layer/RangeSensorLayerConfig.h>
 #include <dynamic_reconfigure/server.h>
 
@@ -31,8 +32,9 @@ public:
   virtual void activate();
 
 private:
+  void syncCB(const sensor_msgs::Range& range_message);
   void reconfigureCB(range_sensor_layer::RangeSensorLayerConfig &config, uint32_t level);
-
+  void bufferIncomingScanMsg(const sensor_msgs::LaserScanConstPtr& scan_message);
   void bufferIncomingRangeMsg(const sensor_msgs::RangeConstPtr& range_message);
   void processRangeMsg(sensor_msgs::Range& range_message);
   void processFixedRangeMsg(sensor_msgs::Range& range_message);
@@ -55,6 +57,8 @@ private:
   boost::mutex range_message_mutex_;
   std::list<sensor_msgs::Range> range_msgs_buffer_;
 
+  boost::mutex scan_message_mutex_;
+  sensor_msgs::LaserScan scan_msgs_;
   double max_angle_, phi_v_;
   std::string global_frame_;
 
@@ -66,6 +70,7 @@ private:
   unsigned int buffered_readings_;
   std::vector<ros::Subscriber> range_subs_;
   double min_x_, min_y_, max_x_, max_y_;
+  bool fusion;
 
   dynamic_reconfigure::Server<range_sensor_layer::RangeSensorLayerConfig> *dsrv_;
 };
