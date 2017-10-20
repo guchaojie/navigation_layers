@@ -31,7 +31,7 @@ void RangeSensorLayer::onInitialize()
 
   // Default topic names list contains a single topic: /sonar
   // We use the XmlRpcValue constructor that takes a XML string and reading start offset
-  const char* xml = "<value><array><data><value>/sonar</value></data></array></value>";
+  const char* xml = "<value><array><data><value>/water_uavcan_master/ultrasonic</value></data></array></value>";
   int zero_offset = 0;
   std::string topics_ns;
   XmlRpc::XmlRpcValue topic_names(xml, &zero_offset);
