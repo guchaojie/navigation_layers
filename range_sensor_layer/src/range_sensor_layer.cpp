@@ -9,7 +9,11 @@ PLUGINLIB_EXPORT_CLASS(range_sensor_layer::RangeSensorLayer, costmap_2d::Layer)
 
 using costmap_2d::NO_INFORMATION;
 
-const int THRESHOLD = 60;
+const int THRESHOLD_FRONT = 0;
+const int THRESHOLD_RIGHT = 0;
+const int THRESHOLD_LEFT = 0;
+const int THRESHOLD_INF = 0;
+const float TRUST_DISTANCE = 0.55;
 
 namespace range_sensor_layer
 {
@@ -31,7 +35,7 @@ void RangeSensorLayer::onInitialize()
 
   // Default topic names list contains a single topic: /sonar
   // We use the XmlRpcValue constructor that takes a XML string and reading start offset
-  const char* xml = "<value><array><data><value>/water_uavcan_master/ultrasonic</value></data></array></value>";
+  const char* xml = "<value><array><data><value>/water_uavcan_master/sonar_filtered</value></data></array></value>";
   int zero_offset = 0;
   std::string topics_ns;
   XmlRpc::XmlRpcValue topic_names(xml, &zero_offset);
@@ -42,6 +46,7 @@ void RangeSensorLayer::onInitialize()
   InputSensorType input_sensor_type = ALL;
   std::string sensor_type_name;
   nh.param("input_sensor_type", sensor_type_name, std::string("ALL"));
+  nh.param("clear_on_max_reading", clear_on_max_reading_, true);
 
   boost::to_upper(sensor_type_name);
   ROS_INFO("%s: %s as input_sensor_type given", name_.c_str(), sensor_type_name.c_str());
@@ -168,36 +173,124 @@ double RangeSensorLayer::sensor_model(double r, double phi, double theta)
 
 void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
 {
+  if (range_message.range > range_message.max_range)
+      return;
   
    scan_message_mutex_.lock();
    sensor_msgs::LaserScan scan_message = scan_msgs_;
    scan_message_mutex_.unlock();
 
+   size_t raduis_start = scan_message.ranges.size()/2 - 50;
+   size_t raduis_stop = scan_message.ranges.size()/2 + 50;
    size_t raduis_center = scan_message.ranges.size()/2;
-   if (scan_message.ranges[raduis_center] > range_message.range + 0.2) {
+   ROS_INFO("scan_message size %d", scan_message.ranges.size());
+   ROS_INFO("scan_message center data %f", scan_message.ranges[raduis_center]);
+   ROS_INFO("scan_message start data %f", scan_message.ranges[raduis_start]);
+   ROS_INFO("scan_message stop data %f", scan_message.ranges[raduis_stop]);
+   ROS_INFO("scan_message time stamp %f", scan_message.header.stamp);
+   ROS_INFO("range_message time stamp %f", range_message.header.stamp);
+   ROS_INFO("range_message data %f", range_message.range);
+/*
+   if (scan_message.ranges[raduis_center] > range_message.range + 0.3 &&
+       scan_message.ranges[raduis_start] > range_message.range + 0.3 &&
+       scan_message.ranges[raduis_stop] > range_message.range + 0.3) {
       fusion = false;
       return;
    }
-
-   size_t raduis_start = scan_message.ranges.size()/2 - 40;
-   size_t raduis_stop = scan_message.ranges.size()/2 + 40;
+*/
+   ROS_INFO("scan_message size %d", scan_message.ranges.size());
    unsigned int count = 0;
-
+   unsigned int inf_count = 0;
    for (size_t i = raduis_start; i < raduis_stop; i++)
    {
       float scan_data = scan_message.ranges[i];
    //   ROS_INFO("scan_data: %f, index %d", scan_data, i);
-      if (!std::isfinite(scan_data)) 
-          continue;
+      if (!std::isfinite(scan_data)) {
+         inf_count++;
+         continue;
+      }
 
-      if (scan_data < range_message.range + 0.2)
+      if (scan_data < range_message.range + TRUST_DISTANCE) {
+     //  count++; 
+         fusion = true;
+         return;
+      }
+        
+   }
+//   ROS_INFO("count %d", count);
+/*
+   if (count > THRESHOLD_FRONT ||
+       inf_count > THRESHOLD_INF) {
+       fusion = true;
+       return;
+   }
+   else
+*/
+       fusion = false;
+
+/*
+   for (size_t i = raduis_center -5; i < raduis_center + 5; i++)
+   {
+      float scan_data = scan_message.ranges[i];
+   //   ROS_INFO("scan_data: %f, index %d", scan_data, i);
+      if (!std::isfinite(scan_data)) {
+         inf_count++;
+         continue;
+      } 
+
+      if (scan_data < range_message.range + TRUST_DISTANCE)
           count++; 
    }
    ROS_INFO("count %d", count);
-   if (count > THRESHOLD)
+   if (count > THRESHOLD_FRONT ||
+       inf_count > THRESHOLD_INF) {
        fusion = true;
+       return;
+   }
    else
        fusion = false;
+
+   for (size_t i = raduis_start; i < raduis_start + 10; i++)
+   {
+      float scan_data = scan_message.ranges[i];
+      ROS_INFO("scan_data: %f, index %d", scan_data, i);
+      if (!std::isfinite(scan_data)) {
+         inf_count++;
+         continue;
+      }
+      if (scan_data < range_message.range + TRUST_DISTANCE)
+          count++; 
+   }
+   ROS_INFO("count %d", count);
+   if (count > THRESHOLD_FRONT ||
+       inf_count > THRESHOLD_INF) {
+       fusion = true;
+       return;
+   }
+   else
+       fusion = false;
+
+   for (size_t i = raduis_stop - 10; i < raduis_stop; i++)
+   {
+      float scan_data = scan_message.ranges[i];
+   //   ROS_INFO("scan_data: %f, index %d", scan_data, i);
+      if (!std::isfinite(scan_data)) {
+         inf_count++;
+         continue;
+      }
+
+      if (scan_data < range_message.range + TRUST_DISTANCE)
+          count++; 
+   }
+   ROS_INFO("count %d", count);
+   if (count > THRESHOLD_FRONT ||
+       inf_count > THRESHOLD_INF) {
+       fusion = true;
+       return;
+   }
+   else
+       fusion = false;
+*/
 
 }
 
@@ -224,7 +317,7 @@ void RangeSensorLayer::bufferIncomingScanMsg(const sensor_msgs::LaserScanConstPt
 
 void RangeSensorLayer::bufferIncomingRangeMsg(const sensor_msgs::RangeConstPtr& range_message)
 {
-  ROS_INFO("range coming");
+ // ROS_INFO("range coming");
   boost::mutex::scoped_lock lock(range_message_mutex_);
   range_msgs_buffer_.push_back(*range_message);
 }
@@ -280,17 +373,22 @@ void RangeSensorLayer::processFixedRangeMsg(sensor_msgs::Range& range_message)
 
 void RangeSensorLayer::processVariableRangeMsg(sensor_msgs::Range& range_message)
 {
-  if (range_message.range < range_message.min_range ||
-      range_message.range > range_message.max_range)
+  ROS_INFO("RANGE MAX, %f", range_message.max_range);
+  ROS_INFO("range min, %f", range_message.min_range);
+  ROS_INFO("RANGE DATA,%f", range_message.range); 
+  if (range_message.range <= range_message.min_range)
     return;
 
+  ROS_INFO("goooooo");
   bool clear_sensor_cone = false;
   syncCB(range_message);
-
-  if ((range_message.range == range_message.max_range && clear_on_max_reading_) ||
+  ROS_INFO("CLEAR MAX %d", clear_on_max_reading_);
+  if ((range_message.range >= range_message.max_range && clear_on_max_reading_) ||
        fusion)
     clear_sensor_cone = true;
 
+   // clear_sensor_cone = true;
+    ROS_INFO("CLEAR SENSOR CONE %d", clear_sensor_cone);
     updateCostmap(range_message, clear_sensor_cone);
 }
 
