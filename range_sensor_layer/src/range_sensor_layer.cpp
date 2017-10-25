@@ -389,6 +389,11 @@ void RangeSensorLayer::update_cell(double ox, double oy, double ot, double r, do
     double dx = nx-ox, dy = ny-oy;
     double theta = atan2(dy, dx) - ot;
     theta = angles::normalize_angle(theta);
+
+    if(clear && fabs(theta)>max_angle_){
+      return;
+    }
+
     double phi = sqrt(dx*dx+dy*dy);
     double sensor = 0.0;
     if(!clear)
