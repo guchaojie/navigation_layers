@@ -9,11 +9,7 @@ PLUGINLIB_EXPORT_CLASS(range_sensor_layer::RangeSensorLayer, costmap_2d::Layer)
 
 using costmap_2d::NO_INFORMATION;
 
-const int THRESHOLD_FRONT = 0;
-const int THRESHOLD_RIGHT = 0;
-const int THRESHOLD_LEFT = 0;
-const int THRESHOLD_INF = 0;
-const float TRUST_DISTANCE = 0.55;
+const float TRUST_DISTANCE = 0.65;
 
 namespace range_sensor_layer
 {
@@ -173,9 +169,6 @@ double RangeSensorLayer::sensor_model(double r, double phi, double theta)
 
 void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
 {
-  if (range_message.range > range_message.max_range)
-      return;
-  
    scan_message_mutex_.lock();
    sensor_msgs::LaserScan scan_message = scan_msgs_;
    scan_message_mutex_.unlock();
@@ -190,15 +183,7 @@ void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
    ROS_INFO("scan_message time stamp %f", scan_message.header.stamp);
    ROS_INFO("range_message time stamp %f", range_message.header.stamp);
    ROS_INFO("range_message data %f", range_message.range);
-/*
-   if (scan_message.ranges[raduis_center] > range_message.range + 0.3 &&
-       scan_message.ranges[raduis_start] > range_message.range + 0.3 &&
-       scan_message.ranges[raduis_stop] > range_message.range + 0.3) {
-      fusion = false;
-      return;
-   }
-*/
-   ROS_INFO("scan_message size %d", scan_message.ranges.size());
+
    unsigned int count = 0;
    unsigned int inf_count = 0;
    for (size_t i = raduis_start; i < raduis_stop; i++)
@@ -211,87 +196,23 @@ void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
       }
 
       if (scan_data < range_message.range + TRUST_DISTANCE) {
+         ROS_INFO("scan data %f", scan_data);
      //  count++; 
          fusion = true;
          return;
       }
         
    }
-//   ROS_INFO("count %d", count);
 /*
-   if (count > THRESHOLD_FRONT ||
-       inf_count > THRESHOLD_INF) {
+      ROS_INFO("count %d", inf_count);
+   if (inf_count > THRESHOLD_MIN && inf_count < THRESHOLD_MAX) {
+      ROS_INFO("inf_count %d", inf_count);
        fusion = true;
        return;
    }
    else
 */
        fusion = false;
-
-/*
-   for (size_t i = raduis_center -5; i < raduis_center + 5; i++)
-   {
-      float scan_data = scan_message.ranges[i];
-   //   ROS_INFO("scan_data: %f, index %d", scan_data, i);
-      if (!std::isfinite(scan_data)) {
-         inf_count++;
-         continue;
-      } 
-
-      if (scan_data < range_message.range + TRUST_DISTANCE)
-          count++; 
-   }
-   ROS_INFO("count %d", count);
-   if (count > THRESHOLD_FRONT ||
-       inf_count > THRESHOLD_INF) {
-       fusion = true;
-       return;
-   }
-   else
-       fusion = false;
-
-   for (size_t i = raduis_start; i < raduis_start + 10; i++)
-   {
-      float scan_data = scan_message.ranges[i];
-      ROS_INFO("scan_data: %f, index %d", scan_data, i);
-      if (!std::isfinite(scan_data)) {
-         inf_count++;
-         continue;
-      }
-      if (scan_data < range_message.range + TRUST_DISTANCE)
-          count++; 
-   }
-   ROS_INFO("count %d", count);
-   if (count > THRESHOLD_FRONT ||
-       inf_count > THRESHOLD_INF) {
-       fusion = true;
-       return;
-   }
-   else
-       fusion = false;
-
-   for (size_t i = raduis_stop - 10; i < raduis_stop; i++)
-   {
-      float scan_data = scan_message.ranges[i];
-   //   ROS_INFO("scan_data: %f, index %d", scan_data, i);
-      if (!std::isfinite(scan_data)) {
-         inf_count++;
-         continue;
-      }
-
-      if (scan_data < range_message.range + TRUST_DISTANCE)
-          count++; 
-   }
-   ROS_INFO("count %d", count);
-   if (count > THRESHOLD_FRONT ||
-       inf_count > THRESHOLD_INF) {
-       fusion = true;
-       return;
-   }
-   else
-       fusion = false;
-*/
-
 }
 
 void RangeSensorLayer::reconfigureCB(range_sensor_layer::RangeSensorLayerConfig &config, uint32_t level)
@@ -379,15 +300,12 @@ void RangeSensorLayer::processVariableRangeMsg(sensor_msgs::Range& range_message
   if (range_message.range <= range_message.min_range)
     return;
 
-  ROS_INFO("goooooo");
   bool clear_sensor_cone = false;
   syncCB(range_message);
-  ROS_INFO("CLEAR MAX %d", clear_on_max_reading_);
-  if ((range_message.range >= range_message.max_range && clear_on_max_reading_) ||
+  if ((range_message.range >= range_message.max_range) ||
        fusion)
     clear_sensor_cone = true;
 
-   // clear_sensor_cone = true;
     ROS_INFO("CLEAR SENSOR CONE %d", clear_sensor_cone);
     updateCostmap(range_message, clear_sensor_cone);
 }
@@ -489,6 +407,10 @@ void RangeSensorLayer::update_cell(double ox, double oy, double ot, double r, do
     theta = angles::normalize_angle(theta);
     double phi = sqrt(dx*dx+dy*dy);
     double sensor = 0.0;
+
+    if (clear && fabs(theta) > max_angle_)
+      return;
+
     if(!clear)
         sensor = sensor_model(r,phi,theta);
     double prior = to_prob(getCost(x,y));
