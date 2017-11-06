@@ -6,10 +6,10 @@
 #include <message_filters/time_synchronizer.h>
 
 PLUGINLIB_EXPORT_CLASS(range_sensor_layer::RangeSensorLayer, costmap_2d::Layer)
-
 using costmap_2d::NO_INFORMATION;
 
 const float TRUST_DISTANCE = 0.65;
+const float CLOSE_DISTANCE = 0.2;
 
 namespace range_sensor_layer
 {
@@ -367,6 +367,9 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
   bx1 = std::max(bx1, a);
   by0 = std::min(by0, b);
   by1 = std::max(by1, b);
+  if (range_message.range >= CLOSE_DISTANCE &&
+      range_message.range < range_message.max_range)
+     setCost(a, b, 233);
   touch(mx, my, &min_x_, &min_y_, &max_x_, &max_y_);
 
   // Update right side of sonar cone
@@ -378,6 +381,9 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
   bx1 = std::max(bx1, a);
   by0 = std::min(by0, b);
   by1 = std::max(by1, b);
+  if (range_message.range >= CLOSE_DISTANCE &&
+      range_message.range < range_message.max_range)
+    setCost(a, b, 233);
   touch(mx, my, &min_x_, &min_y_, &max_x_, &max_y_);
 
   // Limit Bounds to Grid
