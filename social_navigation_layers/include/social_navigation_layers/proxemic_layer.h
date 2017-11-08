@@ -19,7 +19,7 @@ public:
   }
 
   virtual void onInitialize();
-  virtual void updateBoundsFromPeople(double* min_x, double* min_y, double* max_x, double* max_y);
+  virtual void updateBoundsFromSocial(double* min_x, double* min_y, double* max_x, double* max_y);
   virtual void updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j);
 
 protected:

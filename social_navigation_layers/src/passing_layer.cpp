@@ -20,12 +20,12 @@ public:
     boost::recursive_mutex::scoped_lock lock(lock_);
 
     std::string global_frame = layered_costmap_->getGlobalFrameID();
-    transformed_people_.clear();
+    transformed_social_.clear();
 
-    for (unsigned int i = 0; i < people_list_.people.size(); i++)
+    for (unsigned int i = 0; i < social_list_.objects.size(); i++)
     {
-      people_msgs::Person& person = people_list_.people[i];
-      people_msgs::Person tpt;
+      object_bridge_msgs::SocialObject& person = social_list_.objects[i];
+      object_bridge_msgs::SocialObject tpt;
       geometry_msgs::PointStamped pt, opt;
 
       try
@@ -33,7 +33,7 @@ public:
         pt.point.x = person.position.x;
         pt.point.y = person.position.y;
         pt.point.z = person.position.z;
-        pt.header.frame_id = people_list_.header.frame_id;
+        pt.header.frame_id = social_list_.header.frame_id;
         tf_.transformPoint(global_frame, pt, opt);
         tpt.position.x = opt.point.x;
         tpt.position.y = opt.point.y;
@@ -44,11 +44,11 @@ public:
         pt.point.z += person.velocity.z;
         tf_.transformPoint(global_frame, pt, opt);
 
-        tpt.velocity.x = tpt.position.x - opt.point.x;
-        tpt.velocity.y = tpt.position.y - opt.point.y;
-        tpt.velocity.z = tpt.position.z - opt.point.z;
+        tpt.velocity.x = tpt.position.x;
+        tpt.velocity.y = tpt.position.y;
+        tpt.velocity.z = tpt.position.z;
 
-        transformed_people_.push_back(tpt);
+        transformed_social_.push_back(tpt);
 
         double mag = sqrt(pow(tpt.velocity.x, 2) + pow(person.velocity.y, 2));
         double factor = 1.0 + mag * factor_;
@@ -84,18 +84,18 @@ public:
     if (!enabled_)
       return;
 
-    if (people_list_.people.size() == 0)
+    if (social_list_.objects.size() == 0)
       return;
     if (cutoff_ >= amplitude_)
       return;
 
-    std::list<people_msgs::Person>::iterator p_it;
+    std::list<object_bridge_msgs::SocialObject>::iterator p_it;
     costmap_2d::Costmap2D* costmap = layered_costmap_->getCostmap();
     double res = costmap->getResolution();
 
-    for (p_it = transformed_people_.begin(); p_it != transformed_people_.end(); ++p_it)
+    for (p_it = transformed_social_.begin(); p_it != transformed_social_.end(); ++p_it)
     {
-      people_msgs::Person person = *p_it;
+      object_bridge_msgs::SocialObject person = *p_it;
       double angle = atan2(person.velocity.y, person.velocity.x) + 1.51;
       double mag = sqrt(pow(person.velocity.x, 2) + pow(person.velocity.y, 2));
       double factor = 1.0 + mag * factor_;

@@ -5,7 +5,7 @@ project(social_navigation_layers)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   costmap_2d
-  people_msgs
+  object_bridge_msgs
   dynamic_reconfigure
 )
 
@@ -15,7 +15,7 @@ generate_dynamic_reconfigure_options(
 )
 
 catkin_package(
-    CATKIN_DEPENDS people_msgs costmap_2d dynamic_reconfigure
+    CATKIN_DEPENDS object_bridge_msgs costmap_2d dynamic_reconfigure
 )
 
 ## Specify additional locations of header files
@@ -24,14 +24,16 @@ include_directories(
 )
 
 ## add cpp library
-add_library(social_layers 
+add_library(social_layers
             src/social_layer.cpp
-            src/proxemic_layer.cpp 
+            src/proxemic_layer.cpp
             src/passing_layer.cpp
 )
 
 ## Add cmake target dependencies of the executable/library
-add_dependencies(social_layers people_msgs_gencpp ${${PROJECT_NAME}_EXPORTED_TARGETS})
+add_dependencies(social_layers object_bridge_msgs_gencpp
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS})
 
 install(FILES costmap_plugins.xml
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}

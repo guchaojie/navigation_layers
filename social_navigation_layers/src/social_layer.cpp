@@ -14,13 +14,13 @@ void SocialLayer::onInitialize()
   ros::NodeHandle nh("~/" + name_), g_nh;
   current_ = true;
   first_time_ = true;
-  people_sub_ = nh.subscribe("/people", 1, &SocialLayer::peopleCallback, this);
+  social_sub_ = nh.subscribe("/ca_policy/social_object", 1, &SocialLayer::socialCallback, this);
 }
 
-void SocialLayer::peopleCallback(const people_msgs::People& people)
+void SocialLayer::socialCallback(const object_bridge_msgs::SocialObjectsInFrame& people)
 {
   boost::recursive_mutex::scoped_lock lock(lock_);
-  people_list_ = people;
+  social_list_ = people;
 }
 
 void SocialLayer::updateBounds(double origin_x, double origin_y, double origin_z, double* min_x, double* min_y,
@@ -29,12 +29,12 @@ void SocialLayer::updateBounds(double origin_x, double origin_y, double origin_z
   boost::recursive_mutex::scoped_lock lock(lock_);
 
   std::string global_frame = layered_costmap_->getGlobalFrameID();
-  transformed_people_.clear();
+  transformed_social_.clear();
 
-  for (unsigned int i = 0; i < people_list_.people.size(); i++)
+  for (unsigned int i = 0; i < social_list_.objects.size(); i++)
   {
-    people_msgs::Person& person = people_list_.people[i];
-    people_msgs::Person tpt;
+    object_bridge_msgs::SocialObject& person = social_list_.objects[i];
+    object_bridge_msgs::SocialObject tpt;
     geometry_msgs::PointStamped pt, opt;
 
     try
@@ -42,7 +42,7 @@ void SocialLayer::updateBounds(double origin_x, double origin_y, double origin_z
       pt.point.x = person.position.x;
       pt.point.y = person.position.y;
       pt.point.z = person.position.z;
-      pt.header.frame_id = people_list_.header.frame_id;
+      pt.header.frame_id = social_list_.header.frame_id;
       tf_.transformPoint(global_frame, pt, opt);
       tpt.position.x = opt.point.x;
       tpt.position.y = opt.point.y;
@@ -53,11 +53,11 @@ void SocialLayer::updateBounds(double origin_x, double origin_y, double origin_z
       pt.point.z += person.velocity.z;
       tf_.transformPoint(global_frame, pt, opt);
 
-      tpt.velocity.x = opt.point.x - tpt.position.x;
-      tpt.velocity.y = opt.point.y - tpt.position.y;
-      tpt.velocity.z = opt.point.z - tpt.position.z;
+      tpt.velocity.x = opt.point.x;
+      tpt.velocity.y = opt.point.y;
+      tpt.velocity.z = opt.point.z;
 
-      transformed_people_.push_back(tpt);
+      transformed_social_.push_back(tpt);
 
     }
     catch (tf::LookupException& ex)
@@ -76,7 +76,7 @@ void SocialLayer::updateBounds(double origin_x, double origin_y, double origin_z
       continue;
     }
   }
-  updateBoundsFromPeople(min_x, min_y, max_x, max_y);
+  updateBoundsFromSocial(min_x, min_y, max_x, max_y);
   if (first_time_)
   {
     last_min_x_ = *min_x;
