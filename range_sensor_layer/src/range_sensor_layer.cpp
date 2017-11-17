@@ -364,7 +364,7 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
 
   if (range_message.range >= CLOSE_DISTANCE && range_message.range < range_message.max_range)
   {
-    for (double r = -1.0 * radius; r < radius; r -= res)
+    for (double r = -1.0 * radius; r < radius; r += res)
     {
       mx = tx - r * cos(theta);
       my = ty + r * sin(theta);
