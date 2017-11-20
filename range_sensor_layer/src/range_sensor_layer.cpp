@@ -112,9 +112,9 @@ void RangeSensorLayer::onInitialize()
   dsrv_->setCallback(cb);
   global_frame_ = layered_costmap_->getGlobalFrameID();
 
- /* 
+ /*
   message_filters::Subscriber<sensor_msgs::LaserScan> scan_sub(nh, "/scan", 10);
-  message_filters::Subscriber<sensor_msgs::Range> sonar_sub(nh, range_subs_.back().getTopic().c_str(), 10);  
+  message_filters::Subscriber<sensor_msgs::Range> sonar_sub(nh, range_subs_.back().getTopic().c_str(), 10);
 
   message_filters::TimeSynchronizer<sensor_msgs::LaserScan, sensor_msgs::Range> sync(scan_sub, sonar_sub, 60);
   sync.registerCallback(boost::bind(&RangeSensorLayer::syncCB, this, _1, _2));
@@ -197,11 +197,11 @@ void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
 
       if (scan_data < range_message.range + TRUST_DISTANCE) {
          ROS_INFO("scan data %f", scan_data);
-     //  count++; 
+     //  count++;
          fusion = true;
          return;
       }
-        
+
    }
 /*
       ROS_INFO("count %d", inf_count);
@@ -222,7 +222,7 @@ void RangeSensorLayer::reconfigureCB(range_sensor_layer::RangeSensorLayerConfig 
   no_readings_timeout_ = config.no_readings_timeout;
   mark_threshold_ = config.mark_threshold;
   clear_on_max_reading_ = config.clear_on_max_reading;
-    
+
   if(enabled_ != config.enabled)
   {
     enabled_ = config.enabled;
@@ -296,7 +296,7 @@ void RangeSensorLayer::processVariableRangeMsg(sensor_msgs::Range& range_message
 {
   ROS_INFO("RANGE MAX, %f", range_message.max_range);
   ROS_INFO("range min, %f", range_message.min_range);
-  ROS_INFO("RANGE DATA,%f", range_message.range); 
+  ROS_INFO("RANGE DATA,%f", range_message.range);
   if (range_message.range <= range_message.min_range)
     return;
 
@@ -358,33 +358,42 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
 
   double mx, my;
   int a, b;
+  costmap_2d::Costmap2D* costmap = layered_costmap_->getCostmap();
+  double res = costmap->getResolution();
+  double radius = d * tanh(max_angle_);
+
+  if (range_message.range >= CLOSE_DISTANCE && range_message.range < range_message.max_range)
+  {
+    for (double r = -1.0 * radius; r < radius; r += res)
+    {
+      mx = tx - r * sin(theta);
+      my = ty + r * cos(theta);
+      worldToMapNoBounds(mx, my, a, b);
+      setCost(a, b, 233);
+    }
+
+  }
 
   // Update left side of sonar cone
-  mx = ox + cos(theta-max_angle_) * d * 1.2;
-  my = oy + sin(theta-max_angle_) * d * 1.2;
+  mx = tx - radius * sin(theta);
+  my = ty + radius * cos(theta);
   worldToMapNoBounds(mx, my, a, b);
   bx0 = std::min(bx0, a);
   bx1 = std::max(bx1, a);
   by0 = std::min(by0, b);
   by1 = std::max(by1, b);
-  if (range_message.range >= CLOSE_DISTANCE &&
-      range_message.range < range_message.max_range)
-     setCost(a, b, 233);
   touch(mx, my, &min_x_, &min_y_, &max_x_, &max_y_);
 
-  // Update right side of sonar cone
-  mx = ox + cos(theta+max_angle_) * d * 1.2;
-  my = oy + sin(theta+max_angle_) * d * 1.2;
-
+  // Update left side of sonar cone
+  mx = tx + radius * sin(theta);
+  my = ty - radius * cos(theta);
   worldToMapNoBounds(mx, my, a, b);
   bx0 = std::min(bx0, a);
   bx1 = std::max(bx1, a);
   by0 = std::min(by0, b);
   by1 = std::max(by1, b);
-  if (range_message.range >= CLOSE_DISTANCE &&
-      range_message.range < range_message.max_range)
-    setCost(a, b, 233);
   touch(mx, my, &min_x_, &min_y_, &max_x_, &max_y_);
+
 
   // Limit Bounds to Grid
   bx0 = std::max(0, bx0);
@@ -452,7 +461,7 @@ void RangeSensorLayer::updateBounds(double robot_x, double robot_y, double robot
     current_ = true;
     return;
   }
-  
+
   if (buffered_readings_ == 0)
   {
     if (no_readings_timeout_ > 0.0 &&
