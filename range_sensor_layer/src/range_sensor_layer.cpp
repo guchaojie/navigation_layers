@@ -29,6 +29,7 @@ void RangeSensorLayer::onInitialize()
   min_x_ = min_y_ = -std::numeric_limits<double>::max();
   max_x_ = max_y_ = std::numeric_limits<double>::max();
 
+  ROS_INFO("NAME IS %s", name_.c_str());
   // Default topic names list contains a single topic: /sonar
   // We use the XmlRpcValue constructor that takes a XML string and reading start offset
   const char* xml = "<value><array><data><value>/water_uavcan_master/sonar_filtered</value></data></array></value>";
@@ -43,6 +44,7 @@ void RangeSensorLayer::onInitialize()
   std::string sensor_type_name;
   nh.param("input_sensor_type", sensor_type_name, std::string("ALL"));
   nh.param("clear_on_max_reading", clear_on_max_reading_, true);
+  ROS_INFO("clear_on_max_reading IS %d", clear_on_max_reading_);
 
   boost::to_upper(sensor_type_name);
   ROS_INFO("%s: %s as input_sensor_type given", name_.c_str(), sensor_type_name.c_str());
@@ -176,13 +178,13 @@ void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
    size_t raduis_start = scan_message.ranges.size()/2 - 50;
    size_t raduis_stop = scan_message.ranges.size()/2 + 50;
    size_t raduis_center = scan_message.ranges.size()/2;
-   ROS_INFO("scan_message size %d", scan_message.ranges.size());
-   ROS_INFO("scan_message center data %f", scan_message.ranges[raduis_center]);
-   ROS_INFO("scan_message start data %f", scan_message.ranges[raduis_start]);
-   ROS_INFO("scan_message stop data %f", scan_message.ranges[raduis_stop]);
-   ROS_INFO("scan_message time stamp %f", scan_message.header.stamp);
-   ROS_INFO("range_message time stamp %f", range_message.header.stamp);
-   ROS_INFO("range_message data %f", range_message.range);
+ //  ROS_INFO("scan_message size %d", scan_message.ranges.size());
+ //  ROS_INFO("scan_message center data %f", scan_message.ranges[raduis_center]);
+ //  ROS_INFO("scan_message start data %f", scan_message.ranges[raduis_start]);
+ //  ROS_INFO("scan_message stop data %f", scan_message.ranges[raduis_stop]);
+ //  ROS_INFO("scan_message time stamp %f", scan_message.header.stamp);
+ //  ROS_INFO("range_message time stamp %f", range_message.header.stamp);
+ //  ROS_INFO("range_message data %f", range_message.range);
 
    unsigned int count = 0;
    unsigned int inf_count = 0;
@@ -198,7 +200,7 @@ void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
       if (scan_data < range_message.range + TRUST_DISTANCE) {
          ROS_INFO("scan data %f", scan_data);
      //  count++; 
-         fusion = true;
+     //    fusion = true;
          return;
       }
         
@@ -295,18 +297,21 @@ void RangeSensorLayer::processFixedRangeMsg(sensor_msgs::Range& range_message)
 void RangeSensorLayer::processVariableRangeMsg(sensor_msgs::Range& range_message)
 {
   ROS_INFO("RANGE MAX, %f", range_message.max_range);
-  ROS_INFO("range min, %f", range_message.min_range);
+  ROS_INFO("range MIN, %f", range_message.min_range);
   ROS_INFO("RANGE DATA,%f", range_message.range); 
   if (range_message.range <= range_message.min_range)
     return;
 
+  if (range_message.range >= range_message.max_range)
+    return;
   bool clear_sensor_cone = false;
-  syncCB(range_message);
-  if ((range_message.range >= range_message.max_range) ||
-       fusion)
-    clear_sensor_cone = true;
+//  syncCB(range_message);
+//  if ((range_message.range >= range_message.max_range) ||
+//       fusion)
+//    if (fusion)
+//    clear_sensor_cone = true;
 
-    ROS_INFO("CLEAR SENSOR CONE %d", clear_sensor_cone);
+    ROS_INFO("CLEAR SENSOR CONE %d fusion %d", clear_sensor_cone, fusion);
     updateCostmap(range_message, clear_sensor_cone);
 }
 
