@@ -364,31 +364,38 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
   double mx, my;
   int a, b;
 
-  // Update left side of sonar cone
-  mx = ox + cos(theta-max_angle_) * d * 1.2;
-  my = oy + sin(theta-max_angle_) * d * 1.2;
+  costmap_2d::Costmap2D* costmap = layered_costmap_->getCostmap();
+  double res = costmap->getResolution();
+  double radius = d * tanh(max_angle_);
+
+  if (range_message.range >= CLOSE_DISTANCE && range_message.range < range_message.max_range)
+  {
+      for (double r = -1.0 * radius; r < radius; r += res)
+      {
+        mx = tx - r * sin(theta);
+        my = ty + r * cos(theta);
+        worldToMapNoBounds(mx, my, a, b);
+        setCost(a, b, 233);
+      }
+  }
+
+  mx = tx - radius * sin(theta);
+  my = ty + radius * cos(theta);
   worldToMapNoBounds(mx, my, a, b);
   bx0 = std::min(bx0, a);
   bx1 = std::max(bx1, a);
   by0 = std::min(by0, b);
   by1 = std::max(by1, b);
-  if (range_message.range >= CLOSE_DISTANCE &&
-      range_message.range < range_message.max_range)
-     setCost(a, b, 233);
   touch(mx, my, &min_x_, &min_y_, &max_x_, &max_y_);
 
   // Update right side of sonar cone
-  mx = ox + cos(theta+max_angle_) * d * 1.2;
-  my = oy + sin(theta+max_angle_) * d * 1.2;
-
+  mx = tx + radius * sin(theta);
+  my = ty - radius * cos(theta);
   worldToMapNoBounds(mx, my, a, b);
   bx0 = std::min(bx0, a);
   bx1 = std::max(bx1, a);
   by0 = std::min(by0, b);
   by1 = std::max(by1, b);
-  if (range_message.range >= CLOSE_DISTANCE &&
-      range_message.range < range_message.max_range)
-    setCost(a, b, 233);
   touch(mx, my, &min_x_, &min_y_, &max_x_, &max_y_);
 
   // Limit Bounds to Grid
