@@ -167,8 +167,38 @@ double RangeSensorLayer::sensor_model(double r, double phi, double theta)
         return 0.5;
 }
 
+bool RangeSensorLayer::getRobotPose(tf::Stamped<tf::Pose>& global_pose) const
+{
+  global_pose.setIdentity();
+  tf::Stamped < tf::Pose > robot_pose;
+  robot_pose.setIdentity();
+  robot_pose.frame_id_ = "base_link";
+  robot_pose.stamp_ = ros::Time();
+  ros::Time current_time = ros::Time::now();  // save time for checking tf delay later
 
+  // get the global pose of the robot
+  try
+  {
+    tf_->transformPose(global_frame_, robot_pose, global_pose);
+  }
+  catch (tf::LookupException& ex)
+  {
+    ROS_ERROR_THROTTLE(1.0, "No Transform available Error looking up robot pose: %s\n", ex.what());
+    return false;
+  }
+  catch (tf::ConnectivityException& ex)
+  {
+    ROS_ERROR_THROTTLE(1.0, "Connectivity Error looking up robot pose: %s\n", ex.what());
+    return false;
+  }
+  catch (tf::ExtrapolationException& ex)
+  {
+    ROS_ERROR_THROTTLE(1.0, "Extrapolation Error looking up robot pose: %s\n", ex.what());
+    return false;
+  }
 
+  return true;
+}
 void RangeSensorLayer::syncCB(const sensor_msgs::Range& range_message)
 {
    scan_message_mutex_.lock();
@@ -296,23 +326,45 @@ void RangeSensorLayer::processFixedRangeMsg(sensor_msgs::Range& range_message)
 
 void RangeSensorLayer::processVariableRangeMsg(sensor_msgs::Range& range_message)
 {
-  ROS_INFO("RANGE MAX, %f", range_message.max_range);
-  ROS_INFO("range MIN, %f", range_message.min_range);
-  ROS_INFO("RANGE DATA,%f", range_message.range); 
-  if (range_message.range <= range_message.min_range)
-    return;
+   ROS_INFO("RANGE MAX, %f", range_message.max_range);
+   ROS_INFO("range MIN, %f", range_message.min_range);
+   ROS_INFO("RANGE DATA,%f", range_message.range); 
+   if (range_message.range <= range_message.min_range) {
+     fusion = false; 
+     return;
+   }
+     
 
-  if (range_message.range >= range_message.max_range)
-    return;
-  bool clear_sensor_cone = false;
+   if (range_message.range >= range_message.max_range) {
+     fusion = false; 
+     return;
+   }
+   bool clear_sensor_cone = false;
 //  syncCB(range_message);
 //  if ((range_message.range >= range_message.max_range) ||
 //       fusion)
 //    if (fusion)
 //    clear_sensor_cone = true;
 
-    ROS_INFO("CLEAR SENSOR CONE %d fusion %d", clear_sensor_cone, fusion);
-    updateCostmap(range_message, clear_sensor_cone);
+   if (fusion) {
+      tf::Stamped<tf::Pose> global_pose;
+      double current_angle;
+      double theta;
+      if (!getRobotPose(global_pose)) 
+         return;
+        
+      current_angle=tf::getYaw(global_pose.getRotation());
+      theta = angles::normalize_angle(current_angle - last_angle);
+      if (theta > range_message.field_of_view)
+          ROS_WARN("REBACK TO FALSE");
+          fusion = false;
+      last_angle = current_angle;
+   
+   }
+   
+   ROS_INFO("CLEAR SENSOR CONE %d fusion %d", clear_sensor_cone, fusion);
+   if (!fusion)
+     updateCostmap(range_message, clear_sensor_cone);
 }
 
 void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool clear_sensor_cone)
@@ -331,6 +383,7 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
      return;
   }
 
+  fusion = true;
   tf_->transformPoint (global_frame_, in, out);
 
   double ox = out.point.x, oy = out.point.y;
@@ -411,6 +464,12 @@ void RangeSensorLayer::updateCostmap(sensor_msgs::Range& range_message, bool cle
       update_cell(ox, oy, theta, range_message.range, wx, wy, clear_sensor_cone);
     }
   }
+
+  tf::Stamped<tf::Pose> global_pose;
+  if (getRobotPose(global_pose)) 
+     return;
+  last_angle = tf::getYaw(global_pose.getRotation());
+
 
   buffered_readings_++;
   last_reading_time_ = ros::Time::now();

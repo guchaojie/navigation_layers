@@ -50,6 +50,7 @@ private:
   void get_deltas(double angle, double *dx, double *dy);
   void update_cell(double ox, double oy, double ot, double r, double nx, double ny, bool clear);
 
+  bool getRobotPose(tf::Stamped<tf::Pose>& global_pose) const;
   double to_prob(unsigned char c){ return double(c)/costmap_2d::LETHAL_OBSTACLE; }
   unsigned char to_cost(double p){ return (unsigned char)(p*costmap_2d::LETHAL_OBSTACLE); }
 
@@ -71,6 +72,7 @@ private:
   std::vector<ros::Subscriber> range_subs_;
   double min_x_, min_y_, max_x_, max_y_;
   bool fusion;
+  double last_angle;
 
   dynamic_reconfigure::Server<range_sensor_layer::RangeSensorLayerConfig> *dsrv_;
 };
